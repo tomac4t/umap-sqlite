@@ -29,4 +29,8 @@ tx
 # Helm
 charts/*/charts
 helmfile.yaml
-charts/*/Chart.lock
+
+# SQLite migration
+venv/
+umap.db
+local_settings.py

@@ -1,10 +1,7 @@
 from django.conf import settings
-from django.contrib.postgres.search import SearchQuery, SearchVector
 from django.core.management.base import BaseCommand
 
 from umap.models import Map, User
-
-vector = SearchVector("name", config=settings.UMAP_SEARCH_CONFIGURATION)
 
 
 def confirm(prompt):
@@ -84,12 +81,7 @@ class Command(BaseCommand):
             user = User.objects.get(username=options["user"])
             qs = qs.filter(owner=user)
         if options["search"]:
-            query = SearchQuery(
-                options["search"],
-                config=settings.UMAP_SEARCH_CONFIGURATION,
-                search_type="websearch",
-            )
-            qs = qs.annotate(search=vector).filter(search=query)
+            qs = qs.filter(name__icontains=options["search"])
         if options["id"]:
             qs = qs.filter(pk__in=options["id"])
         if options["limit"]:

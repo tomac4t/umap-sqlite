@@ -304,10 +304,10 @@ UMAP_HELP_LINKS = [
 ]
 USER_MAPS_URL = "user_maps"
 DATABASES = {
-    "default": env.db(
-        default="postgis://localhost:5432/umap",
-        engine="django.contrib.gis.db.backends.postgis",
-    )
+    "default": {
+        "ENGINE": "django.contrib.gis.db.backends.spatialite",
+        "NAME": "umap.db",
+    }
 }
 UMAP_DEFAULT_SHARE_STATUS = None
 UMAP_DEFAULT_EDIT_STATUS = None

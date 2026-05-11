@@ -16,7 +16,7 @@ from django.contrib import messages
 from django.contrib.auth import BACKEND_SESSION_KEY, get_user_model
 from django.contrib.auth import logout as do_logout
 from django.contrib.gis.measure import D
-from django.contrib.postgres.search import SearchQuery, SearchVector
+
 from django.contrib.sessions.models import Session
 from django.contrib.staticfiles.storage import staticfiles_storage
 from django.core.exceptions import PermissionDenied
@@ -327,11 +327,7 @@ class SearchMixin:
         q = self.request.GET.get("q")
         tags = [t for t in self.request.GET.getlist("tags") if t]
         if q:
-            vector = SearchVector("name", config=settings.UMAP_SEARCH_CONFIGURATION)
-            query = SearchQuery(
-                q, config=settings.UMAP_SEARCH_CONFIGURATION, search_type="websearch"
-            )
-            qs = qs.annotate(search=vector).filter(search=query)
+            qs = qs.filter(name__icontains=q)
         if tags:
             qs = qs.filter(tags__contains=tags)
         if q or tags:

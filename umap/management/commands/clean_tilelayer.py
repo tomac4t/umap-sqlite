@@ -1,8 +1,8 @@
+import json
 import sys
 
 from django.core.management.base import BaseCommand
 from django.db import connection
-from psycopg.types.json import Jsonb
 
 from umap.models import Map, TileLayer
 
@@ -86,28 +86,30 @@ class Command(BaseCommand):
             "Are you sure you want to delete the tilelayer key from all those "
             "maps settings ?"
         ):
-            with connection.cursor() as cursor:
-                ret = cursor.execute(
-                    "UPDATE umap_map "
-                    "SET settings['properties'] = (settings->'properties') - 'tilelayer'"
-                    "WHERE settings->'properties'->'tilelayer'->'url_template' = %s",
-                    [Jsonb(old)],
-                )
-            self.stdout.write(f"✔ Deleted {old} from {ret.rowcount} maps.")
+            count = 0
+            for m in Map.objects.filter(
+                settings__properties__tilelayer__url_template=old
+            ):
+                if "properties" in m.settings and "tilelayer" in m.settings.get("properties", {}):
+                    del m.settings["properties"]["tilelayer"]
+                    m.save(update_fields=["settings"])
+                    count += 1
+            self.stdout.write(f"✔ Deleted {old} from {count} maps.")
 
     def replace_url(self, old, new):
         if self.confirm(
             f"Are you sure you want to replace '{old}'' by '{new}'' from all those "
             "map settings ?"
         ):
-            with connection.cursor() as cursor:
-                ret = cursor.execute(
-                    "UPDATE umap_map "
-                    "SET settings['properties']['tilelayer']['url_template'] = %s "
-                    "WHERE settings->'properties'->'tilelayer'->'url_template' = %s",
-                    [Jsonb(new), Jsonb(old)],
-                )
-            self.stdout.write(f"✔ Replaced {old} by {new} in {ret.rowcount} maps.")
+            count = 0
+            for m in Map.objects.filter(
+                settings__properties__tilelayer__url_template=old
+            ):
+                if "properties" in m.settings:
+                    m.settings["properties"]["tilelayer"]["url_template"] = new
+                    m.save(update_fields=["settings"])
+                    count += 1
+            self.stdout.write(f"✔ Replaced {old} by {new} in {count} maps.")
 
     def replace_tilelayer(self, old, new):
         try:
@@ -121,15 +123,16 @@ class Command(BaseCommand):
             f"Are you sure you want to replace {old} by '{tilelayer.name}' "
             "from all those map settings ?"
         ):
-            with connection.cursor() as cursor:
-                ret = cursor.execute(
-                    "UPDATE umap_map "
-                    "SET settings['properties']['tilelayer'] = %s "
-                    "WHERE settings->'properties'->'tilelayer'->'url_template' = %s",
-                    [Jsonb(tilelayer.json), Jsonb(old)],
-                )
+            count = 0
+            for m in Map.objects.filter(
+                settings__properties__tilelayer__url_template=old
+            ):
+                if "properties" in m.settings:
+                    m.settings["properties"]["tilelayer"] = tilelayer.json
+                    m.save(update_fields=["settings"])
+                    count += 1
             self.stdout.write(
-                f"✔ Replaced {old} by {tilelayer.name} in {ret.rowcount} maps."
+                f"✔ Replaced {old} by {tilelayer.name} in {count} maps."
             )
 
     def list_available(self):
@@ -138,14 +141,14 @@ class Command(BaseCommand):
             print(f"{tilelayer.pk} '{tilelayer.name}' {tilelayer.url_template}")
 
     def stats(self):
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT COUNT(*) as count, "
-                "settings->'properties'->'tilelayer'->'url_template' as url "
-                "FROM umap_map "
-                "GROUP BY settings->'properties'->'tilelayer'->'url_template' "
-                "ORDER BY count DESC"
-            )
-            res = cursor.fetchall()
-        for count, url in res:
+        from collections import Counter
+        counter = Counter()
+        for m in Map.objects.all():
+            try:
+                url = m.settings.get("properties", {}).get("tilelayer", {}).get("url_template")
+                if url:
+                    counter[url] += 1
+            except (KeyError, AttributeError):
+                pass
+        for url, count in counter.most_common():
             print(f"{count}\t{url}")

@@ -4,7 +4,7 @@ import uuid
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.contrib.gis.db import models
-from django.contrib.postgres.fields import ArrayField
+
 from django.core.files.base import File
 from django.core.files.storage import storages
 from django.core.signing import Signer
@@ -237,7 +237,7 @@ class Map(NamedModel):
     settings = models.JSONField(
         blank=True, null=True, verbose_name=_("settings"), default=dict
     )
-    tags = ArrayField(models.CharField(max_length=200), blank=True, default=list)
+    tags = models.JSONField(blank=True, default=list)
     is_template = models.BooleanField(
         default=False,
         verbose_name=_("save as template"),
