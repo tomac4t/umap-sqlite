@@ -237,7 +237,7 @@ class Map(NamedModel):
     settings = models.JSONField(
         blank=True, null=True, verbose_name=_("settings"), default=dict
     )
-    tags = models.JSONField(blank=True, default=list)
+    tags = models.JSONField(blank=True, null=True, default=list)
     is_template = models.BooleanField(
         default=False,
         verbose_name=_("save as template"),
@@ -443,7 +443,7 @@ class Map(NamedModel):
 
     def get_tags_display(self):
         labels = dict(settings.UMAP_TAGS)
-        return [(t, labels.get(t, t)) for t in self.tags]
+        return [(t, labels.get(t, t)) for t in (self.tags or [])]
 
     @classproperty
     def extra_schema(self):

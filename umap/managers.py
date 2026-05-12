@@ -19,13 +19,18 @@ class PublicManager(models.Manager):
 
 class PrivateQuerySet(models.QuerySet):
     def for_user(self, user):
+        """
+        Return maps visible to the given user.
+        Uses Q-OR instead of union() for SQLite compatibility.
+        (SQLite does not allow ORDER BY in subqueries of compound statements.)
+        """
+        from django.db.models import Q
+
         qs = self.exclude(share_status__in=[self.model.DELETED, self.model.BLOCKED])
         teams = user.teams.all()
-        qs = (
-            qs.filter(owner=user)
-            .union(qs.filter(editors=user))
-            .union(qs.filter(team__in=teams))
-        )
+        qs = qs.filter(
+            Q(owner=user) | Q(editors=user) | Q(team__in=teams)
+        ).distinct()
         return qs
 
 
