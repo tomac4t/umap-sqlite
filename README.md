@@ -15,3 +15,145 @@ Built on top of Django and Leaflet.
 - Have a look at [our website](https://umap-project.org) for an introduction
 - See [our docs](https://docs.umap-project.org/) for technical information
 - Come [chat with us on matrix](https://matrix.to/#/#umap:matrix.org), start a thread on [the forum](https://forum.openstreetmap.fr/c/utiliser/umap/29) or join [the mailing list](https://lists.openstreetmap.org/listinfo/umap)
+
+* * *
+
+This patch enables umap to run using only a SQLite database. For most users, relying on PostgreSQL is an unnecessarily heavy requirement for running a small-scale project.
+
+## Installation Manual
+
+### Prerequisites
+
+- Python ≥ 3.10 is required (as the dependencies requires `django-environ==0.13.0`; see [`pyproject.toml`](pyproject.toml));
+- Django 5.2 requires GDAL ≥ 3.1.
+
+Testing has confirmed that both `Debian Trixie` and `Ubuntu Jammy` satisfy these requirements.
+
+If running on an older system, it is recommended to use the Miniforge package manager to install Python in order to resolve potential dependency issues; this step is marked as "Optional" below.
+
+### Step 1: Install Miniforge (Optional)
+
+> Conda provides a correctly compiled Python 3.10 (with support for SQLite3 extension loading) + pre-compiled, up-to-date versions of GDAL/PROJ.
+
+```bash
+cd /tmp
+# the AMD64 version of Conda
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh 
+bash Miniforge3-Linux-x86_64.sh -b -p ~/miniforge3
+# the ARM64 version of Conda
+wget https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh
+bash Miniforge3-Linux-aarch64.sh -b -p ~/miniforge3
+
+# Use Conda to install Python 3.10 + the full GDAL suite
+~/miniforge3/bin/conda install -c conda-forge python=3.10 gdal libgdal proj -y
+```
+
+### Step 2: Fetch the Code and Create a Virtual Environment
+
+```bash
+git clone https://github.com/tomac4t/umap-sqlite.git
+cd ~/umap-sqlite
+
+# Create a venv using System's Python
+python3 -m venv venv
+# Create a venv using Conda's Python (Optional)
+~/miniforge3/bin/python3.10 -m venv venv
+
+source venv/bin/activate
+
+# Upgrade pip and install the project, `-i` for pip mirrors.
+pip install --upgrade pip #-i https://pypi.tuna.tsinghua.edu.cn/simple
+pip install -e . #-i https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+### Step 3: Apply the Django SpatiaLite Compatibility Patch
+
+```bash
+bash scripts/patch_django_spatialite.sh
+```
+
+### Step 4: Create the Configuration File
+
+```bash
+cat > local_settings.py << 'EOF'
+import os
+
+SECRET_KEY = "umap-sqlite-dev-key-not-for-production-change-me"
+DEBUG = True
+UMAP_ALLOW_ANONYMOUS = True
+ENABLE_ACCOUNT_LOGIN = True
+SITE_URL = "http://localhost:8000"
+INTERNAL_IPS = ["127.0.0.1"]
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.contrib.gis.db.backends.spatialite",
+        "NAME": os.path.join(os.path.dirname(__file__), "umap.db"),
+    }
+}
+
+REALTIME_ENABLED = False
+EOF
+```
+
+### Step 5: Set Environment Variables and Initialize the Database
+
+```bash
+# These environment variables must be set before every startup
+export UMAP_SETTINGS=$(pwd)/local_settings.py
+# For miniforge (Optional)
+export LD_PRELOAD=$HOME/miniforge3/lib/libgdal.so.39:$HOME/miniforge3/lib/libgeos_c.so.1
+
+# Verify the environment
+python3 -c "import sqlite3; c=sqlite3.connect(':memory:'); c.enable_load_extension(True); print('SQLite OK')"
+
+# Initialize SpatiaLite metadata and delete triggers that would cause Django migrations to fail
+python3 manage.py shell <<'PYEOF'
+from django.db import connection
+c = connection.cursor()
+c.execute("SELECT InitSpatialMetaDataFull(0)")
+triggers = c.execute("SELECT name FROM sqlite_master WHERE type='trigger'").fetchall()
+for (tname,) in triggers:
+    c.execute(f"DROP TRIGGER IF EXISTS {tname}")
+print(f"Dropped {len(triggers)} triggers")
+PYEOF
+
+# Run database migrations
+python3 manage.py migrate admin 0001          # Create basic tables
+python3 manage.py migrate admin 0002 --fake   # Skip the buggy migration
+python3 manage.py migrate                     # Complete all remaining migrations
+
+# Collect static files
+python3 manage.py collectstatic --noinput
+
+# Create an administrator account
+python3 manage.py createsuperuser --username admin --email admin@local.dev
+```
+
+### Step 6: Start the Server
+
+```bash
+python3 manage.py runserver 127.0.0.1:8000
+```
+
+### Step 7: Create a One-Click Startup Script
+
+```bash
+cat > ~/umap-sqlite/start.sh << 'EOF'
+#!/bin/bash
+cd ~/umap-sqlite
+source venv/bin/activate
+export UMAP_SETTINGS=$(pwd)/local_settings.py
+# NOTE: for Miniforge (Optional)
+export LD_PRELOAD=$HOME/miniforge3/lib/libgdal.so.39:$HOME/miniforge3/lib/libgeos_c.so.1
+python3 manage.py runserver 127.0.0.1:8000
+EOF
+
+chmod +x ~/umap-sqlite/start.sh
+```
+
+From now on, to launch the application, simply run:
+
+```bash
+cd ~/umap-sqlite && ./start.sh
+```
