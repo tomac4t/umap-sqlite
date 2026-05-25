@@ -18,7 +18,9 @@ Built on top of Django and Leaflet.
 
 * * *
 
-This patch enables umap to run using only a SQLite database. For most users, relying on PostgreSQL is an unnecessarily heavy requirement for running a small-scale project.
+This patch enables uMap to run using only a SQLite database. For most users, relying on PostgreSQL is an unnecessarily heavy requirement for running a small-scale project.
+
+The uMap maintainers told me that they had previously supported SQLite, but, suspecting that no one was actually using it, they dropped support to make their own lives easier. The map search functionality is currently broken; however, as long as the core features remain operational, that suffices. If I were to offer a lazy justification for this approach, it would be simply this: "worse is better."
 
 ## Installation Manual
 
